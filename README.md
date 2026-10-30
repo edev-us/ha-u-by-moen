@@ -3,6 +3,69 @@
 A custom Home Assistant integration for U by Moen smart showers using an
 Alexa/Android account. HomeKit-only systems are not supported.
 
+## About this fork
+
+This is a fork of [mrworf/ha-u-by-moen](https://github.com/mrworf/ha-u-by-moen),
+maintained only until one fix lands upstream.
+
+### The fix
+
+Upstream registers the Pusher supervisor with `hass.async_create_task`.
+`_PusherConnection._supervise()` is a `while self._running` reconnect loop that
+runs for the lifetime of the config entry and never returns, and Home
+Assistant's `async_start` awaits every task registered that way before it
+finishes starting. Startup therefore blocked until the bootstrap timeout fired,
+and the same task then delayed shutdown:
+
+```
+WARNING [homeassistant.bootstrap] Setup timed out for bootstrap waiting on
+{<Task pending name='U by Moen Pusher supervisor' ...>} - moving forward
+```
+
+The fix is one line: `hass.async_create_background_task`, which the Home
+Assistant developer documentation describes as not blocking startup and as
+cancelled automatically on shutdown.
+
+Measured on Home Assistant 2026.10.4:
+
+| | Before | After |
+| --- | --- | --- |
+| Bootstrap timeout | 5m17s after start | none |
+| Shutdown warning | present | none |
+| Entities serving live state | ~5m20s | 1m20s |
+
+### Branches
+
+| Branch | Contents |
+| --- | --- |
+| `main` | an exact mirror of upstream `main`. Never modified here. |
+| `fix/pusher-supervisor-blocks-startup` | upstream + the fix, and nothing else. The branch the upstream pull request is opened from. |
+| `dist` | the fix plus the packaging needed to install it. **This is what HACS downloads.** |
+
+`main` is kept byte-identical to upstream so it can always fast-forward, and so
+the pull request contains the one-line change and nothing else — version
+numbers for upstream's releases are the maintainer's call, not a contributor's.
+
+### Versioning
+
+Releases here are tagged `1.2.0-edev.N`: upstream's 1.2.0, plus this fork's
+build N. **These are not upstream releases and never will be.** The `-edev`
+suffix exists so a version from this fork can never be confused with, or
+collide with, a real release from upstream.
+
+### Installing
+
+HACS → ⋮ → Custom repositories → add
+`https://github.com/edev-us/ha-u-by-moen` as an Integration, then download
+U by Moen.
+
+### Retirement
+
+When the pull request lands upstream, this fork is done: point HACS back at
+`mrworf/ha-u-by-moen` and remove the custom repository.
+
+---
+
 ## Project Status
 
 Core shower controls, timely sensor updates, preset activation, and preset
